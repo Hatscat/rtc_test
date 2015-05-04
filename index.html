@@ -1,0 +1,141 @@
+<body onload=main() style=position:fixed;margin:0;cursor:none>
+<canvas id=C>
+<script src="http://www.rtcmulticonnection.org/latest.js"></script>
+<script>
+
+	function main ()
+	{
+		// canvas stuff
+		W = C.width = innerWidth;
+		H = C.height = innerHeight;
+		ctx = C.getContext('2d');
+		ctx.fillRect(0, 0, W, H);
+
+		// webRTC config
+		room_name = "rtc_test";
+		rtc_connection = new RTCMultiConnection();
+		//rtc_connection.log = false;
+		rtc_connection.session = { data: true };
+		// webRTC events
+		rtc_connection.onNewSession = rtc_newSession;
+		rtc_connection.onopen = rtc_open;
+		rtc_connection.onleave = rtc_leave;
+		rtc_connection.onmessage = rtc_message;
+		// webRTC connection
+		rtc_connection.connect(room_name);
+
+		// wait the signaling channel
+		wait(rtc_connection, 'socket', 200, function ()
+		{
+			setTimeout(function ()
+			{
+				if (rtc_connection.sessionDescriptions[room_name])
+				{
+					console.log('join!!');
+					rtc_connection.join(rtc_connection.sessionDescriptions[room_name]);
+				}
+				else
+				{
+					console.log('open...');
+					rtc_connection.open(room_name);
+				}
+
+				// data
+				circles = {};
+				circles[rtc_connection.userid] = new Circle(W*.5, H*.5);
+
+				onmousemove = mouse_move;
+				loop();
+
+			}, 3000);
+			
+		});
+	}
+
+	function wait (bool_container, bool_name_to_test, time, next)
+	{
+		if (bool_container[bool_name_to_test])
+		{
+			next();
+		}
+		else
+		{
+			window.setTimeout(function(){wait(bool_container,bool_name_to_test,time,next)}, time);
+		}
+	}
+
+	function loop ()
+	{
+		requestAnimationFrame(loop);
+
+		rtc_connection.send( { x: circles[rtc_connection.userid].x, y: circles[rtc_connection.userid].y } );
+
+		for (var c in circles)
+		{
+			circles[c].draw(ctx);
+		}
+	}
+
+	// class
+
+	function Circle (x, y)
+	{
+		this.x = x;
+		this.y = y;
+		this.color = 'rgb(' + (Math.random()*1e3&255) +','+ (Math.random()*1e3&255) +','+ (Math.random()*1e3&255) +')';
+		this.radius = H * 0.06 | 0;
+	}
+
+	Circle.prototype.draw = function (ctx)
+	{
+		ctx.beginPath();
+		ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+		ctx.fillStyle = this.color;
+		ctx.fill();
+	};
+
+	// events
+
+	mouse_move = function (e)
+	{
+
+		circles[rtc_connection.userid].x = e.clientX;
+		circles[rtc_connection.userid].y = e.clientY;
+	};
+
+	rtc_leave = function (e)
+	{
+		console.log('rtc_leave:', e);
+		// e.entireSessionClosed --------- this boolean allows you identify initiator
+		// e.userid
+		// e.extra
+		
+		circles[e.userid] = null;
+		delete circles[e.userid];
+	};
+
+
+	rtc_open = function (e)
+	{
+		console.log('rtc_open', e);
+
+		circles[e.userid] = new Circle(W*.5, H*.5);
+	};
+
+	rtc_message = function (e)
+	{
+		//console.log('rtc_message:', e);
+		// e.data
+		// e.userid
+		// e.extra
+
+		circles[e.userid].x = e.data.x;
+		circles[e.userid].y = e.data.y;
+	};
+
+	rtc_newSession = function (e)
+	{
+		console.log('rtc_newSession:', e);
+	};
+
+</script>
